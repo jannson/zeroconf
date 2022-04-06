@@ -143,7 +143,7 @@ const (
 // Server structure encapsulates both IPv4/IPv6 UDP connections
 type Server struct {
 	service  *ServiceEntry
-	ipv4conn *ipv4.PacketConn
+	ipv4conn PacketConn
 	ipv6conn *ipv6.PacketConn
 	ifaces   []net.Interface
 
@@ -156,11 +156,11 @@ type Server struct {
 
 // Constructs server structure
 func newServer(ifaces []net.Interface) (*Server, error) {
-	ipv4conn, err4 := joinUdp4Multicast(ifaces)
+	ipv4conn, err4 := createIpv4Conn(ifaces)
 	if err4 != nil {
 		log.Printf("[zeroconf] no suitable IPv4 interface: %s", err4.Error())
 	}
-	ipv6conn, err6 := joinUdp6Multicast(ifaces)
+	ipv6conn, err6 := createIpv6Conn(ifaces)
 	if err6 != nil {
 		log.Printf("[zeroconf] no suitable IPv6 interface: %s", err6.Error())
 	}
@@ -233,7 +233,7 @@ func (s *Server) shutdown() error {
 }
 
 // recv is a long running routine to receive packets from an interface
-func (s *Server) recv4(c *ipv4.PacketConn) {
+func (s *Server) recv4(c PacketConn) {
 	if c == nil {
 		return
 	}
@@ -619,7 +619,7 @@ func (s *Server) appendAddrs(list []dns.RR, ttl uint32, ifIndex int, flushCache 
 	v4 := s.service.AddrIPv4
 	v6 := s.service.AddrIPv6
 	if len(v4) == 0 && len(v6) == 0 {
-		iface, _ := net.InterfaceByIndex(ifIndex)
+		iface, _ := interfaceByIndex(ifIndex)
 		if iface != nil {
 			a4, a6 := addrsForInterface(iface)
 			v4 = append(v4, a4...)
@@ -665,7 +665,12 @@ func (s *Server) appendAddrs(list []dns.RR, ttl uint32, ifIndex int, flushCache 
 
 func addrsForInterface(iface *net.Interface) ([]net.IP, []net.IP) {
 	var v4, v6, v6local []net.IP
-	addrs, _ := iface.Addrs()
+	var addrs []net.Addr
+	if strings.HasPrefix(iface.Name, CustomIfs.Name()) {
+		addrs, _ = iface.Addrs()
+	} else {
+		addrs, _ = iface.Addrs()
+	}
 	for _, address := range addrs {
 		if ipnet, ok := address.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
 			if ipnet.IP.To4() != nil {
