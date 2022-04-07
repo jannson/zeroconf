@@ -16,10 +16,10 @@ type PacketConn interface {
 
 // ifIndex > 0
 type WrapInterfaces interface {
-	Name() string
+	IfName() string
 	GetAddrs(ifIndex int) ([]net.Addr, error)
 	ByIndex(ifIndex int) (*net.Interface, error)
-	Ipv4Conn(ifIndex int) (*ipv4.PacketConn, error)
+	Ipv4Conn(ifIndex int) (PacketConn, error)
 }
 
 var WrapIfs WrapInterfaces

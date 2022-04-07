@@ -666,8 +666,8 @@ func (s *Server) appendAddrs(list []dns.RR, ttl uint32, ifIndex int, flushCache 
 func addrsForInterface(iface *net.Interface) ([]net.IP, []net.IP) {
 	var v4, v6, v6local []net.IP
 	var addrs []net.Addr
-	if strings.HasPrefix(iface.Name, CustomIfs.Name()) {
-		addrs, _ = iface.Addrs()
+	if strings.HasPrefix(iface.Name, WrapIfs.IfName()) {
+		addrs, _ = WrapIfs.GetAddrs(iface.Index)
 	} else {
 		addrs, _ = iface.Addrs()
 	}
