@@ -26,9 +26,9 @@ var WrapIfs WrapInterfaces
 
 func interfaceByIndex(ifIndex int) (*net.Interface, error) {
 	if WrapIfs != nil {
-		return net.InterfaceByIndex(ifIndex)
+		return WrapIfs.ByIndex(ifIndex)
 	}
-	return WrapIfs.ByIndex(ifIndex)
+	return net.InterfaceByIndex(ifIndex)
 }
 
 func createIpv4Conn(ifaces []net.Interface) (PacketConn, error) {

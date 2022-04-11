@@ -6,7 +6,6 @@ import (
 	"log"
 	"math/rand"
 	"net"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -42,12 +41,13 @@ func Register(instance, service, domain string, port int, text []string, ifaces 
 	}
 
 	var err error
-	if entry.HostName == "" {
+	/* if entry.HostName == "" {
 		entry.HostName, err = os.Hostname()
 		if err != nil {
 			return nil, fmt.Errorf("could not determine host")
 		}
-	}
+	} */
+	entry.HostName = instance
 
 	if !strings.HasSuffix(trimDot(entry.HostName), entry.Domain) {
 		entry.HostName = fmt.Sprintf("%s.%s.", trimDot(entry.HostName), trimDot(entry.Domain))
@@ -288,7 +288,7 @@ func (s *Server) recv6(c *ipv6.PacketConn) {
 func (s *Server) parsePacket(packet []byte, ifIndex int, from net.Addr) error {
 	var msg dns.Msg
 	if err := msg.Unpack(packet); err != nil {
-		// log.Printf("[ERR] zeroconf: Failed to unpack packet: %v", err)
+		log.Printf("[ERR] zeroconf: Failed to unpack packet: %v", err)
 		return err
 	}
 	return s.handleQuery(&msg, ifIndex, from)
@@ -300,6 +300,8 @@ func (s *Server) handleQuery(query *dns.Msg, ifIndex int, from net.Addr) error {
 	if len(query.Ns) > 0 {
 		return nil
 	}
+
+	log.Println("handleQuery from=", from)
 
 	// Handle each question
 	var err error
@@ -313,11 +315,12 @@ func (s *Server) handleQuery(query *dns.Msg, ifIndex int, from net.Addr) error {
 		resp.Answer = []dns.RR{}
 		resp.Extra = []dns.RR{}
 		if err = s.handleQuestion(q, &resp, query, ifIndex); err != nil {
-			// log.Printf("[ERR] zeroconf: failed to handle question %v: %v", q, err)
+			log.Printf("[ERR] zeroconf: failed to handle question %v: %v", q, err)
 			continue
 		}
 		// Check if there is an answer
 		if len(resp.Answer) == 0 {
+			log.Println("handleQuery from=", from, "no answer", "name=", q.Name)
 			continue
 		}
 
@@ -355,7 +358,7 @@ func isKnownAnswer(resp *dns.Msg, query *dns.Msg) bool {
 		}
 		ptr := known.(*dns.PTR)
 		if ptr.Ptr == answer.Ptr && hdr.Ttl >= answer.Hdr.Ttl/2 {
-			// log.Printf("skipping known answer: %v", ptr)
+			log.Printf("skipping known answer: %v", ptr)
 			return true
 		}
 	}
@@ -668,7 +671,9 @@ func addrsForInterface(iface *net.Interface) ([]net.IP, []net.IP) {
 	var addrs []net.Addr
 	if strings.HasPrefix(iface.Name, WrapIfs.IfName()) {
 		addrs, _ = WrapIfs.GetAddrs(iface.Index)
+		log.Println("got addr addrs=", addrs)
 	} else {
+		log.Println("got addr2 addrs=", addrs)
 		addrs, _ = iface.Addrs()
 	}
 	for _, address := range addrs {
@@ -699,6 +704,7 @@ func (s *Server) unicastResponse(resp *dns.Msg, ifIndex int, from net.Addr) erro
 	}
 	addr := from.(*net.UDPAddr)
 	if addr.IP.To4() != nil {
+		log.Println("unicast ip=", addr.IP, "ifIndex=", ifIndex)
 		if ifIndex != 0 {
 			var wcm ipv4.ControlMessage
 			wcm.IfIndex = ifIndex
@@ -727,6 +733,7 @@ func (s *Server) multicastResponse(msg *dns.Msg, ifIndex int) error {
 	}
 	if s.ipv4conn != nil {
 		var wcm ipv4.ControlMessage
+		log.Println("mulkticast ifIndex=", ifIndex)
 		if ifIndex != 0 {
 			wcm.IfIndex = ifIndex
 			s.ipv4conn.WriteTo(buf, &wcm, ipv4Addr)
