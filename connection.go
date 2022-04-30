@@ -2,7 +2,9 @@ package zeroconf
 
 import (
 	"fmt"
+	"log"
 	"net"
+	"runtime"
 
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"
@@ -68,7 +70,7 @@ func joinUdp6Multicast(interfaces []net.Interface) (*ipv6.PacketConn, error) {
 func joinUdp4Multicast(interfaces []net.Interface) (*ipv4.PacketConn, error) {
 	udpConn, err := net.ListenUDP("udp4", mdnsWildcardAddrIPv4)
 	if err != nil {
-		// log.Printf("[ERR] bonjour: Failed to bind to udp4 mutlicast: %v", err)
+		log.Printf("[ERR] bonjour: Failed to bind to udp4 mutlicast: %v", err)
 		return nil, err
 	}
 
@@ -83,6 +85,13 @@ func joinUdp4Multicast(interfaces []net.Interface) (*ipv4.PacketConn, error) {
 
 	var failedJoins int
 	for _, iface := range interfaces {
+		if runtime.GOOS == "windows" {
+			if err := pkConn.SetMulticastInterface(&iface); err != nil {
+				log.Printf("[WARN] mdns: Failed to set multicast interface: %v", err)
+				return nil, err
+			}
+		}
+
 		if err := pkConn.JoinGroup(&iface, &net.UDPAddr{IP: mdnsGroupIPv4}); err != nil {
 			// log.Println("Udp4 JoinGroup failed for iface ", iface)
 			failedJoins++

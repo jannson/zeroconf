@@ -247,6 +247,7 @@ func (s *Server) recv4(c *ipv4.PacketConn) {
 		default:
 			var ifIndex int
 			n, cm, from, err := c.ReadFrom(buf)
+			log.Println("readFrom from=", from, "err=", err)
 			if err != nil {
 				continue
 			}
@@ -288,7 +289,7 @@ func (s *Server) recv6(c *ipv6.PacketConn) {
 func (s *Server) parsePacket(packet []byte, ifIndex int, from net.Addr) error {
 	var msg dns.Msg
 	if err := msg.Unpack(packet); err != nil {
-		// log.Printf("[ERR] zeroconf: Failed to unpack packet: %v", err)
+		log.Printf("[ERR] zeroconf: Failed to unpack packet: %v", err)
 		return err
 	}
 	return s.handleQuery(&msg, ifIndex, from)
@@ -300,6 +301,8 @@ func (s *Server) handleQuery(query *dns.Msg, ifIndex int, from net.Addr) error {
 	if len(query.Ns) > 0 {
 		return nil
 	}
+
+	log.Println("handleQuery from=", from)
 
 	// Handle each question
 	var err error
@@ -313,11 +316,12 @@ func (s *Server) handleQuery(query *dns.Msg, ifIndex int, from net.Addr) error {
 		resp.Answer = []dns.RR{}
 		resp.Extra = []dns.RR{}
 		if err = s.handleQuestion(q, &resp, query, ifIndex); err != nil {
-			// log.Printf("[ERR] zeroconf: failed to handle question %v: %v", q, err)
+			log.Printf("[ERR] zeroconf: failed to handle question %v: %v", q, err)
 			continue
 		}
 		// Check if there is an answer
 		if len(resp.Answer) == 0 {
+			log.Println("No answer q.Name=", q.Name)
 			continue
 		}
 

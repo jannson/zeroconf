@@ -3,7 +3,9 @@ package zeroconf
 import (
 	"context"
 	"fmt"
+	"log"
 	"net"
+	"runtime"
 	"strings"
 	"time"
 
@@ -199,6 +201,7 @@ func (c *client) mainloop(ctx context.Context, params *lookupParams) {
 			c.shutdown()
 			return
 		case msg := <-msgCh:
+			//log.Println("mdns client got msg")
 			entries = make(map[string]*ServiceEntry)
 			sections := append(msg.Answer, msg.Ns...)
 			sections = append(sections, msg.Extra...)
@@ -326,6 +329,7 @@ func (c *client) recv(ctx context.Context, l interface{}, msgCh chan *dns.Msg) {
 	case *ipv4.PacketConn:
 		readFrom = func(b []byte) (n int, src net.Addr, err error) {
 			n, _, src, err = pConn.ReadFrom(b)
+			//log.Println("readFrom src=", src)
 			return
 		}
 
@@ -443,12 +447,11 @@ func (c *client) sendQuery(msg *dns.Msg) error {
 		return err
 	}
 	if c.ipv4conn != nil {
-		var wcm ipv4.ControlMessage
-		for ifi := range c.ifaces {
-			wcm.IfIndex = c.ifaces[ifi].Index
-			c.ipv4conn.WriteTo(buf, &wcm, ipv4Addr)
+		for _, ifi := range c.ifaces {
+			writeIpv4Conn(c.ipv4conn, buf, ipv4Addr, &ifi)
 		}
 	}
+
 	if c.ipv6conn != nil {
 		var wcm ipv6.ControlMessage
 		for ifi := range c.ifaces {
@@ -457,4 +460,17 @@ func (c *client) sendQuery(msg *dns.Msg) error {
 		}
 	}
 	return nil
+}
+
+func writeIpv4Conn(ipv4conn *ipv4.PacketConn, buf []byte, addr net.Addr, ifi *net.Interface) {
+	if runtime.GOOS == "windows" {
+		if err := ipv4conn.SetMulticastInterface(ifi); err != nil {
+			//log.Printf("[WARN] mdns: Failed to set multicast interface: %v", err)
+			return
+		}
+	} else {
+		var wcm ipv4.ControlMessage
+		wcm.IfIndex = ifi.Index
+		ipv4conn.WriteTo(buf, &wcm, addr)
+	}
 }
