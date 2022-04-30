@@ -132,8 +132,8 @@ func validateService(service *connection.Service) error {
 		return errors.Errorf("missing port")
 	}
 
-	if len(service.A) == 0 || len(service.AAAA) == 0 {
-		return errors.Errorf("missing A or AAAA record")
+	if len(service.A) == 0 && len(service.AAAA) == 0 {
+		return errors.Errorf("missing A and AAAA record")
 	}
 	return nil
 }
@@ -223,6 +223,8 @@ func (self *Server) handleQuery(query *dns.Msg, ifIndex int, from net.Addr) erro
 	if len(query.Ns) > 0 {
 		return nil
 	}
+
+	level.Info(self.logger).Log("from", from)
 
 	// Handle each question
 	var err error

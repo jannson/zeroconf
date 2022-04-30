@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/grandcat/zeroconf/utils"
 	"github.com/miekg/dns"
 	"github.com/pkg/errors"
 	"github.com/uber-go/multierr"
@@ -132,6 +133,10 @@ func NewService(instance, name, domain, target string, port uint16, text []strin
 		}
 	}
 
+	if !strings.HasSuffix(utils.TrimDot(s.Target), s.Domain) {
+		s.Target = fmt.Sprintf("%s.%s.", utils.TrimDot(s.Target), utils.TrimDot(s.Domain))
+	}
+
 	for _, subtype := range subtypes {
 		s.Subtypes = append(s.Subtypes, fmt.Sprintf("%s._sub.%s", subtype, name))
 	}
@@ -140,6 +145,57 @@ func NewService(instance, name, domain, target string, port uint16, text []strin
 		s, err = AddServiceIP(log.NewNopLogger(), s)
 		if err != nil {
 			return nil, err
+		}
+	}
+
+	return s, nil
+}
+
+func NewServiceProxy(instance, name, domain string, port uint16, host string, ips, text []string) (*Service, error) {
+	name, subtypes := parseSubtypes(name)
+
+	var err error
+
+	s := &Service{
+		Instance: instance,
+		Name:     name,
+		Domain:   domain,
+		Port:     port,
+		TXT:      text,
+		TTL:      3200,
+	}
+
+	if s.Domain == "" {
+		s.Domain = "local"
+	}
+
+	if host == "" {
+		s.Target, err = os.Hostname()
+		if err != nil {
+			return nil, errors.Errorf("Could not determine host")
+		}
+	} else {
+		s.Target = host
+	}
+
+	if !strings.HasSuffix(utils.TrimDot(s.Target), s.Domain) {
+		s.Target = fmt.Sprintf("%s.%s.", utils.TrimDot(s.Target), utils.TrimDot(s.Domain))
+	}
+
+	for _, subtype := range subtypes {
+		s.Subtypes = append(s.Subtypes, fmt.Sprintf("%s._sub.%s", subtype, name))
+	}
+
+	for _, ip := range ips {
+		ipAddr := net.ParseIP(ip)
+		if ipAddr == nil {
+			return nil, fmt.Errorf("failed to parse given IP: %v", ip)
+		} else if ipv4 := ipAddr.To4(); ipv4 != nil {
+			s.A = append(s.A, ipv4)
+		} else if ipv6 := ipAddr.To16(); ipv6 != nil {
+			s.AAAA = append(s.AAAA, ipv6)
+		} else {
+			return nil, fmt.Errorf("the IP is neither IPv4 nor IPv6: %#v", ipAddr)
 		}
 	}
 
@@ -222,12 +278,12 @@ func JoinUdp4Multicast(logger log.Logger, ifFilter []int) (*ipv4.PacketConn, err
 	}
 
 	interfaces := ListMulticastInterfaces(logger, ifFilter)
-	level.Info(logger).Log("msg", "using multicast", "type", "udp6", "interfaces", fmt.Sprintf("%+v", interfaces))
+	level.Info(logger).Log("msg", "using multicast", "type", "udp4", "interfaces", fmt.Sprintf("%+v", interfaces))
 
 	var failedJoins int
 	for _, iface := range interfaces {
 		if err := pkConn.JoinGroup(&iface, &net.UDPAddr{IP: mdnsGroupIPv4}); err != nil {
-			level.Error(logger).Log("msg", "udp4 JoinGroup for iface", "iface", iface, "err", err)
+			level.Error(logger).Log("msg", "udp4 JoinGroup for iface", "iface", iface.Name, "err", err)
 			failedJoins++
 		}
 	}
@@ -246,12 +302,17 @@ func ListMulticastInterfaces(logger log.Logger, filters []int) []net.Interface {
 		return nil
 	}
 
-Ifaces:
 	for _, ifi := range ifaces {
+		var found bool
 		for _, filter := range filters {
-			if ifi.Index != filter {
-				continue Ifaces
+			if ifi.Index == filter {
+				found = true
+				break
 			}
+			//level.Info(logger).Log("filter", ifi.Name)
+		}
+		if !found {
+			continue
 		}
 		if (ifi.Flags & net.FlagUp) == 0 {
 			continue

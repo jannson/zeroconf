@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/davecgh/go-spew/spew"
@@ -97,4 +98,9 @@ func typeAndKind(v interface{}) (reflect.Type, reflect.Kind) {
 		k = t.Kind()
 	}
 	return t, k
+}
+
+// trimDot is used to trim the dots from the start or end of a string
+func TrimDot(s string) string {
+	return strings.Trim(s, ".")
 }
