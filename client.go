@@ -3,7 +3,6 @@ package zeroconf
 import (
 	"context"
 	"fmt"
-	"log"
 	"net"
 	"runtime"
 	"strings"
